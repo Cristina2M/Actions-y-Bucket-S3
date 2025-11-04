@@ -10,10 +10,11 @@ function incrementar(n) {
 }
 
 // Solo accedemos al DOM si existe (para que Jest no falle)
+n=0;
 if (typeof document !== 'undefined') {
   document.getElementById('btn')?.addEventListener('click', () => {
     const el = document.getElementById('title');
-    el.textContent = `Contador: ${incrementar(0)}`;
+    el.textContent = `Contador: ${incrementar(n)}`;
   });
 }
 
