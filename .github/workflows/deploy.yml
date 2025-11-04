@@ -1,0 +1,95 @@
+name: Actions - Test, Docs & Deploy a AWS BucketS3
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build site (dist) and generate docs
+        run: npm run predeploy
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jsdocs
+          path: docs
+
+  commit-docs:
+    name: Commit generated docs to repo
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate docs and build site
+        run: npm run predeploy
+
+      - name: Commit and push docs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A docs
+          git commit -m "chore: update generated docs [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }}
+
+    deploy-to-s3:
+    name: Deploy to Amazon S3
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Sync files to S3
+        run: |
+          aws s3 sync dist/ s3://$S3_BUCKET_NAME/ --delete --acl public-read
+        env:
+          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
